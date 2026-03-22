@@ -413,14 +413,7 @@
           </div>
         </section>
 
-        <section x-show="(status.cron?.count || 0) > 0">
-          <h2 class="text-lg font-semibold mb-3">Cron Jobs <span class="text-sm text-gray-500" x-text="'(' + (status.cron?.count || 0) + ')'"></span></h2>
-          <div class="bg-white border border-gray-200 dark:bg-gray-900 dark:border-gray-800 rounded-xl p-4">
-            <template x-for="(job, i) in (status.cron?.jobs || [])" :key="i">
-              <div class="text-sm py-1 text-gray-500 dark:text-gray-400" x-text="JSON.stringify(job)"></div>
-            </template>
-          </div>
-        </section>
+
 
         <section>
           <div class="flex items-center justify-between mb-3">
@@ -508,6 +501,51 @@
                 </template>
                 <tr x-show="workspaceItems.length === 0">
                   <td colspan="4" class="px-4 py-8 text-center text-gray-500">Empty directory</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <div x-show="tab === 'cron'">
+      <div class="space-y-6">
+        <section>
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-lg font-semibold">Scheduled Jobs</h2>
+            <span class="text-sm text-gray-500" x-text="(status.cron?.count || 0) + ' jobs'"></span>
+          </div>
+          <div class="bg-white border border-gray-200 dark:bg-gray-900 dark:border-gray-800 rounded-xl overflow-hidden">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-100/50 dark:bg-gray-800/50">
+                <tr>
+                  <th class="text-left px-4 py-2 text-xs text-gray-500 font-medium w-32">Schedule</th>
+                  <th class="text-left px-4 py-2 text-xs text-gray-500 font-medium">Task / Message</th>
+                  <th class="text-left px-4 py-2 text-xs text-gray-500 font-medium w-24">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="job in (status.cron?.jobs || [])" :key="job.id">
+                  <tr class="border-t border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
+                    <td class="px-4 py-2 font-mono text-xs">
+                      <span x-show="job.cron_expr" x-text="job.cron_expr" class="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded"></span>
+                      <span x-show="job.every_seconds" x-text="'Every ' + job.every_seconds + 's'" class="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded"></span>
+                      <span x-show="job.at_seconds" x-text="'In ' + job.at_seconds + 's'" class="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded"></span>
+                    </td>
+                    <td class="px-4 py-2 text-gray-700 dark:text-gray-300">
+                      <div class="font-medium" x-show="job.command" x-text="'Command: ' + job.command"></div>
+                      <div :class="job.command ? 'text-xs text-gray-500 mt-1' : ''" x-text="job.message"></div>
+                    </td>
+                    <td class="px-4 py-2">
+                      <span class="text-xs px-2 py-0.5 rounded-full"
+                            :class="job.enabled !== false ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-500'"
+                            x-text="job.enabled !== false ? 'Active' : 'Disabled'"></span>
+                    </td>
+                  </tr>
+                </template>
+                <tr x-show="(status.cron?.count || 0) === 0">
+                  <td colspan="3" class="px-4 py-8 text-center text-gray-500">No scheduled jobs</td>
                 </tr>
               </tbody>
             </table>
