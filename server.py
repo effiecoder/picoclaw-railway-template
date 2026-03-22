@@ -373,11 +373,18 @@ routes = [
     Route("/api/gateway/restart", api_gateway_restart, methods=["POST"]),
 ]
 
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: Starlette):
+    await auto_start_gateway()
+    yield
+    await gateway.stop()
+
 app = Starlette(
     routes=routes,
     middleware=[Middleware(AuthenticationMiddleware, backend=BasicAuthBackend())],
-    on_startup=[auto_start_gateway],
-    on_shutdown=[gateway.stop],
+    lifespan=lifespan,
 )
 
 
