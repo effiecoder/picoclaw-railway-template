@@ -497,10 +497,11 @@
                   <tr class="border-t border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
                     <td class="px-4 py-2 text-center" x-text="item.is_dir ? '📁' : '📄'"></td>
                     <td class="px-4 py-2">
-                      <a href="#" class="hover:text-blue-500 transition cursor-pointer" @click.prevent="item.is_dir ? loadWorkspace(item.path) : downloadWorkspaceFile(item.path)" x-text="item.name"></a>
+                      <a href="#" class="hover:text-blue-500 transition cursor-pointer" @click.prevent="item.is_dir ? loadWorkspace(item.path) : previewWorkspaceFile(item.path)" x-text="item.name"></a>
                     </td>
                     <td class="px-4 py-2 text-gray-500" x-text="item.is_dir ? '-' : formatBytes(item.size)"></td>
                     <td class="px-4 py-2">
+                      <button x-show="!item.is_dir" @click="previewWorkspaceFile(item.path)" class="text-blue-500 hover:text-blue-700 text-xs mr-2">Preview</button>
                       <button x-show="!item.is_dir" @click="downloadWorkspaceFile(item.path)" class="text-blue-500 hover:text-blue-700 text-xs">Download</button>
                     </td>
                   </tr>
@@ -512,6 +513,23 @@
             </table>
           </div>
         </section>
+      </div>
+    </div>
+
+    <!-- File Preview Modal -->
+    <div x-show="previewFile" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" x-cloak>
+      <div class="bg-white dark:bg-gray-900 rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col m-4" @click.away="closePreview()">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800">
+          <h3 class="font-medium truncate" x-text="previewFile"></h3>
+          <div class="flex gap-2">
+            <button @click="downloadWorkspaceFile(previewFile)" class="text-sm px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded transition">Download</button>
+            <button @click="closePreview()" class="text-sm px-3 py-1 bg-gray-200 hover:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 rounded transition">Close</button>
+          </div>
+        </div>
+        <div class="flex-1 p-4 overflow-auto bg-gray-50 dark:bg-gray-950">
+          <div x-show="previewLoading" class="text-center py-8 text-gray-500">Loading...</div>
+          <pre x-show="!previewLoading" class="text-sm font-mono whitespace-pre-wrap break-all text-gray-800 dark:text-gray-200" x-text="previewContent"></pre>
+        </div>
       </div>
     </div>
 
@@ -529,6 +547,9 @@
         tab: 'config',
         workspacePath: '',
         workspaceItems: [],
+        previewFile: null,
+        previewContent: '',
+        previewLoading: false,
 
         config: defaultConfig(),
         rawConfigText: '',
@@ -764,6 +785,33 @@
           } catch (e) {
             this.showToast('Network error', 'error');
           }
+        },
+
+        async previewWorkspaceFile(path) {
+          this.previewFile = path;
+          this.previewContent = '';
+          this.previewLoading = true;
+          
+          try {
+            const res = await fetch('/api/workspace/download?path=' + encodeURIComponent(path));
+            if (res.ok) {
+              const text = await res.text();
+              this.previewContent = text;
+            } else {
+              this.showToast('Failed to load file', 'error');
+              this.previewFile = null;
+            }
+          } catch (e) {
+            this.showToast('Network error', 'error');
+            this.previewFile = null;
+          } finally {
+            this.previewLoading = false;
+          }
+        },
+
+        closePreview() {
+          this.previewFile = null;
+          this.previewContent = '';
         },
 
         downloadWorkspaceFile(path) {
