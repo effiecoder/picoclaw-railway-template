@@ -45,6 +45,8 @@
               :class="tab === 'config' ? 'bg-gray-200 text-gray-900 dark:bg-gray-800 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'">Configuration</button>
       <button @click="tab = 'status'" class="px-4 py-2 text-sm font-medium rounded-t-lg transition"
               :class="tab === 'status' ? 'bg-gray-200 text-gray-900 dark:bg-gray-800 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'">Status</button>
+      <button @click="tab = 'raw'; loadRawConfig()" class="px-4 py-2 text-sm font-medium rounded-t-lg transition"
+              :class="tab === 'raw' ? 'bg-gray-200 text-gray-900 dark:bg-gray-800 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'">Config Editor</button>
     </div>
 
     <div x-show="tab === 'config'">
@@ -433,6 +435,32 @@
       </div>
     </div>
 
+    <div x-show="tab === 'raw'">
+      <div class="space-y-6">
+        <section>
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-lg font-semibold">Config JSON Editor</h2>
+            <div class="flex gap-2">
+              <button @click="downloadRawConfig()" class="text-sm px-3 py-1.5 bg-gray-200 hover:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 rounded-lg transition">Download</button>
+              <label class="cursor-pointer text-sm px-3 py-1.5 bg-gray-200 hover:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 rounded-lg transition">
+                Upload
+                <input type="file" accept=".json" class="hidden" @change="uploadRawConfig">
+              </label>
+            </div>
+          </div>
+          <div class="bg-white border border-gray-200 dark:bg-gray-900 dark:border-gray-800 rounded-xl p-4">
+            <textarea x-model="rawConfigText" rows="25" class="w-full bg-gray-100 border border-gray-300 dark:bg-gray-800 dark:border-gray-700 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500" placeholder="Loading config..."></textarea>
+          </div>
+          <div class="flex justify-end mt-4">
+            <button @click="saveRawConfig()" :disabled="saving" class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition disabled:opacity-50">
+              <span x-show="!saving">Save & Restart</span>
+              <span x-show="saving">Saving...</span>
+            </button>
+          </div>
+        </section>
+      </div>
+    </div>
+
     <div x-show="toast.show" x-transition
          class="fixed bottom-6 right-6 px-4 py-3 rounded-xl text-sm font-medium text-white shadow-lg"
          :class="toast.type === 'error' ? 'bg-red-600' : 'bg-emerald-600'">
@@ -445,6 +473,7 @@
       return {
         tab: 'config',
         config: defaultConfig(),
+        rawConfigText: '',
         status: {},
         logs: [],
         saving: false,
@@ -516,6 +545,87 @@
             this.showToast('Save failed: ' + e.message, 'error');
           }
           this.saving = false;
+        },
+
+        async loadRawConfig() {
+          try {
+            const res = await fetch('/api/config/raw');
+            if (res.ok) {
+              const data = await res.json();
+              this.rawConfigText = JSON.stringify(data, null, 2);
+            }
+          } catch (e) {
+            this.showToast('Failed to load raw config', 'error');
+          }
+        },
+
+        async saveRawConfig() {
+          this.saving = true;
+          try {
+            let parsed;
+            try {
+              parsed = JSON.parse(this.rawConfigText);
+            } catch (e) {
+              this.showToast('Invalid JSON format', 'error');
+              this.saving = false;
+              return;
+            }
+            
+            const res = await fetch('/api/config/raw', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(parsed)
+            });
+            
+            if (res.ok) {
+              this.showToast('Raw config saved and gateway restarting');
+              this.loadConfig(); // Update main UI
+            } else {
+              const data = await res.json();
+              this.showToast(data.error || 'Failed to save', 'error');
+            }
+          } catch (e) {
+            this.showToast('Network error', 'error');
+          } finally {
+            this.saving = false;
+          }
+        },
+
+        downloadRawConfig() {
+          try {
+            const blob = new Blob([this.rawConfigText], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'config.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          } catch (e) {
+            this.showToast('Failed to download', 'error');
+          }
+        },
+
+        uploadRawConfig(event) {
+          const file = event.target.files[0];
+          if (!file) return;
+          
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            try {
+              const text = e.target.result;
+              // Validate JSON
+              JSON.parse(text);
+              this.rawConfigText = text;
+              this.showToast('File loaded. Click Save & Restart to apply.');
+            } catch (err) {
+              this.showToast('Invalid JSON file', 'error');
+            }
+          };
+          reader.readAsText(file);
+          // Reset input so the same file can be selected again
+          event.target.value = '';
         },
 
         async loadStatus() {

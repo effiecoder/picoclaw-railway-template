@@ -253,6 +253,31 @@ async def health(request: Request):
     return JSONResponse({"status": "ok", "gateway": gateway.state})
 
 
+async def api_config_raw_get(request: Request):
+    auth_err = require_auth(request)
+    if auth_err:
+        return auth_err
+    return JSONResponse(load_config())
+
+async def api_config_raw_put(request: Request):
+    auth_err = require_auth(request)
+    if auth_err:
+        return auth_err
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+    try:
+        async with config_lock:
+            save_config(body)
+        asyncio.create_task(gateway.restart())
+        return JSONResponse({"ok": True, "restarting": True})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 async def api_config_get(request: Request):
     auth_err = require_auth(request)
     if auth_err:
@@ -364,6 +389,8 @@ async def auto_start_gateway():
 routes = [
     Route("/", homepage),
     Route("/health", health),
+    Route("/api/config/raw", api_config_raw_get, methods=["GET"]),
+    Route("/api/config/raw", api_config_raw_put, methods=["PUT"]),
     Route("/api/config", api_config_get, methods=["GET"]),
     Route("/api/config", api_config_put, methods=["PUT"]),
     Route("/api/status", api_status),
