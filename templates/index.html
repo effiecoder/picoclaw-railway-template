@@ -47,6 +47,8 @@
               :class="tab === 'status' ? 'bg-gray-200 text-gray-900 dark:bg-gray-800 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'">Status</button>
       <button @click="tab = 'raw'; loadRawConfig()" class="px-4 py-2 text-sm font-medium rounded-t-lg transition"
               :class="tab === 'raw' ? 'bg-gray-200 text-gray-900 dark:bg-gray-800 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'">Config Editor</button>
+      <button @click="tab = 'workspace'; loadWorkspace('')" class="px-4 py-2 text-sm font-medium rounded-t-lg transition"
+              :class="tab === 'workspace' ? 'bg-gray-200 text-gray-900 dark:bg-gray-800 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'">Workspace</button>
     </div>
 
     <div x-show="tab === 'config'">
@@ -461,7 +463,60 @@
       </div>
     </div>
 
+
+    <div x-show="tab === 'workspace'">
+      <div class="space-y-6">
+        <section>
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <h2 class="text-lg font-semibold">Workspace Explorer</h2>
+              <span class="text-sm font-mono text-gray-500 bg-gray-200 dark:bg-gray-800 px-2 py-0.5 rounded" x-text="'/' + workspacePath"></span>
+            </div>
+            <div class="flex gap-2">
+              <button @click="loadWorkspace(workspaceParent())" class="text-sm px-3 py-1.5 bg-gray-200 hover:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 rounded-lg transition" :disabled="!workspacePath">Up</button>
+              <button @click="loadWorkspace(workspacePath)" class="text-sm px-3 py-1.5 bg-gray-200 hover:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 rounded-lg transition">Refresh</button>
+              <label class="cursor-pointer text-sm px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition">
+                Upload File
+                <input type="file" class="hidden" @change="uploadWorkspaceFile">
+              </label>
+            </div>
+          </div>
+          
+          <div class="bg-white border border-gray-200 dark:bg-gray-900 dark:border-gray-800 rounded-xl overflow-hidden">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-100/50 dark:bg-gray-800/50">
+                <tr>
+                  <th class="text-left px-4 py-2 text-xs text-gray-500 font-medium w-8">Type</th>
+                  <th class="text-left px-4 py-2 text-xs text-gray-500 font-medium">Name</th>
+                  <th class="text-left px-4 py-2 text-xs text-gray-500 font-medium w-24">Size</th>
+                  <th class="text-left px-4 py-2 text-xs text-gray-500 font-medium w-24">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="item in workspaceItems" :key="item.name">
+                  <tr class="border-t border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition">
+                    <td class="px-4 py-2 text-center" x-text="item.is_dir ? '📁' : '📄'"></td>
+                    <td class="px-4 py-2">
+                      <a href="#" class="hover:text-blue-500 transition cursor-pointer" @click.prevent="item.is_dir ? loadWorkspace(item.path) : downloadWorkspaceFile(item.path)" x-text="item.name"></a>
+                    </td>
+                    <td class="px-4 py-2 text-gray-500" x-text="item.is_dir ? '-' : formatBytes(item.size)"></td>
+                    <td class="px-4 py-2">
+                      <button x-show="!item.is_dir" @click="downloadWorkspaceFile(item.path)" class="text-blue-500 hover:text-blue-700 text-xs">Download</button>
+                    </td>
+                  </tr>
+                </template>
+                <tr x-show="workspaceItems.length === 0">
+                  <td colspan="4" class="px-4 py-8 text-center text-gray-500">Empty directory</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </div>
+
     <div x-show="toast.show" x-transition
+
          class="fixed bottom-6 right-6 px-4 py-3 rounded-xl text-sm font-medium text-white shadow-lg"
          :class="toast.type === 'error' ? 'bg-red-600' : 'bg-emerald-600'">
       <span x-text="toast.message"></span>
@@ -472,6 +527,9 @@
     function app() {
       return {
         tab: 'config',
+        workspacePath: '',
+        workspaceItems: [],
+
         config: defaultConfig(),
         rawConfigText: '',
         status: {},
@@ -684,6 +742,66 @@
           type = type || 'success';
           this.toast = { show: true, message: message, type: type };
           setTimeout(() => { this.toast.show = false; }, 3000);
+        },
+
+        workspaceParent() {
+          if (!this.workspacePath) return '';
+          const parts = this.workspacePath.split('/').filter(Boolean);
+          parts.pop();
+          return parts.join('/');
+        },
+
+        async loadWorkspace(path) {
+          try {
+            const res = await fetch('/api/workspace/list?path=' + encodeURIComponent(path || ''));
+            if (res.ok) {
+              const data = await res.json();
+              this.workspacePath = data.current_path;
+              this.workspaceItems = data.items;
+            } else {
+              this.showToast('Failed to load workspace', 'error');
+            }
+          } catch (e) {
+            this.showToast('Network error', 'error');
+          }
+        },
+
+        downloadWorkspaceFile(path) {
+          window.open('/api/workspace/download?path=' + encodeURIComponent(path), '_blank');
+        },
+
+        async uploadWorkspaceFile(event) {
+          const file = event.target.files[0];
+          if (!file) return;
+          
+          const formData = new FormData();
+          formData.append('file', file);
+          
+          try {
+            const res = await fetch('/api/workspace/upload?path=' + encodeURIComponent(this.workspacePath), {
+              method: 'POST',
+              body: formData
+            });
+            
+            if (res.ok) {
+              this.showToast('File uploaded successfully');
+              this.loadWorkspace(this.workspacePath);
+            } else {
+              const data = await res.json();
+              this.showToast(data.error || 'Upload failed', 'error');
+            }
+          } catch (e) {
+            this.showToast('Network error', 'error');
+          }
+          event.target.value = '';
+        },
+
+        formatBytes(bytes) {
+          if (bytes === 0) return '0 B';
+          const k = 1024;
+          const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+          const i = Math.floor(Math.log(bytes) / Math.log(k));
+          return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
         }
       };
     }

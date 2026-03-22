@@ -19,7 +19,7 @@ from starlette.authentication import (
 from starlette.middleware import Middleware
 from starlette.middleware.authentication import AuthenticationMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse, PlainTextResponse
+from starlette.responses import JSONResponse, PlainTextResponse, FileResponse
 from starlette.routing import Route
 from starlette.templating import Jinja2Templates
 
@@ -386,6 +386,84 @@ async def auto_start_gateway():
         asyncio.create_task(gateway.start())
 
 
+
+def get_workspace_path():
+    config = load_config()
+    ws_path = config.get("agents", {}).get("defaults", {}).get("workspace", "~/.picoclaw/workspace")
+    path = Path(os.path.expanduser(ws_path)).resolve()
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+async def api_workspace_list(request: Request):
+    auth_err = require_auth(request)
+    if auth_err: return auth_err
+    
+    ws_path = get_workspace_path()
+    req_path = request.query_params.get("path", "")
+    target_path = (ws_path / req_path).resolve()
+    
+    if not str(target_path).startswith(str(ws_path)):
+        return JSONResponse({"error": "Access denied"}, status_code=403)
+        
+    if not target_path.exists():
+        return JSONResponse({"error": "Path not found"}, status_code=404)
+        
+    items = []
+    if target_path.is_dir():
+        for item in target_path.iterdir():
+            items.append({
+                "name": item.name,
+                "is_dir": item.is_dir(),
+                "size": item.stat().st_size if not item.is_dir() else 0,
+                "path": str(item.relative_to(ws_path))
+            })
+    items.sort(key=lambda x: (not x["is_dir"], x["name"].lower()))
+    
+    return JSONResponse({
+        "current_path": req_path,
+        "items": items
+    })
+
+async def api_workspace_download(request: Request):
+    auth_err = require_auth(request)
+    if auth_err: return auth_err
+    
+    ws_path = get_workspace_path()
+    req_path = request.query_params.get("path", "")
+    target_path = (ws_path / req_path).resolve()
+    
+    if not str(target_path).startswith(str(ws_path)):
+        return JSONResponse({"error": "Access denied"}, status_code=403)
+        
+    if not target_path.is_file():
+        return JSONResponse({"error": "File not found"}, status_code=404)
+        
+    return FileResponse(target_path, filename=target_path.name)
+
+async def api_workspace_upload(request: Request):
+    auth_err = require_auth(request)
+    if auth_err: return auth_err
+    
+    ws_path = get_workspace_path()
+    req_path = request.query_params.get("path", "")
+    target_dir = (ws_path / req_path).resolve()
+    
+    if not str(target_dir).startswith(str(ws_path)):
+        return JSONResponse({"error": "Access denied"}, status_code=403)
+        
+    target_dir.mkdir(parents=True, exist_ok=True)
+    
+    form = await request.form()
+    file = form.get("file")
+    if not file:
+        return JSONResponse({"error": "No file uploaded"}, status_code=400)
+        
+    file_path = target_dir / file.filename
+    contents = await file.read()
+    file_path.write_bytes(contents)
+    
+    return JSONResponse({"ok": True, "path": str(file_path.relative_to(ws_path))})
+
 routes = [
     Route("/", homepage),
     Route("/health", health),
@@ -398,6 +476,9 @@ routes = [
     Route("/api/gateway/start", api_gateway_start, methods=["POST"]),
     Route("/api/gateway/stop", api_gateway_stop, methods=["POST"]),
     Route("/api/gateway/restart", api_gateway_restart, methods=["POST"]),
+    Route("/api/workspace/list", api_workspace_list, methods=["GET"]),
+    Route("/api/workspace/download", api_workspace_download, methods=["GET"]),
+    Route("/api/workspace/upload", api_workspace_upload, methods=["POST"]),
 ]
 
 from contextlib import asynccontextmanager
