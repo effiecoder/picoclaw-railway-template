@@ -327,14 +327,34 @@ async def api_status(request: Request):
     for name, chan in config.get("channels", {}).items():
         channels[name] = {"enabled": chan.get("enabled", False)}
 
-    cron_dir = CONFIG_DIR / "cron"
+    ws_path = get_workspace_path()
+    jobs_file = ws_path / "cron" / "jobs.json"
     cron_jobs = []
-    if cron_dir.exists():
-        for f in cron_dir.glob("*.json"):
-            try:
-                cron_jobs.append(json.loads(f.read_text()))
-            except Exception:
-                pass
+    if jobs_file.exists():
+        try:
+            data = json.loads(jobs_file.read_text())
+            for j in data.get("jobs", []):
+                mapped = {
+                    "id": j.get("id"),
+                    "enabled": j.get("enabled", True),
+                }
+                sched = j.get("schedule", {})
+                if sched.get("kind") == "cron":
+                    mapped["cron_expr"] = sched.get("expr")
+                elif sched.get("kind") == "every":
+                    mapped["every_seconds"] = sched.get("seconds")
+                elif sched.get("kind") == "at":
+                    mapped["at_seconds"] = "Scheduled"
+                
+                payload = j.get("payload", {})
+                if payload.get("kind") == "command":
+                    mapped["command"] = payload.get("command")
+                else:
+                    mapped["message"] = payload.get("message") or j.get("name")
+                
+                cron_jobs.append(mapped)
+        except Exception:
+            pass
 
     return JSONResponse({
         "gateway": gateway.get_status(),
