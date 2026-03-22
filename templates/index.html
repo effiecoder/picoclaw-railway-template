@@ -49,6 +49,8 @@
               :class="tab === 'raw' ? 'bg-gray-200 text-gray-900 dark:bg-gray-800 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'">Config Editor</button>
       <button @click="tab = 'workspace'; loadWorkspace('')" class="px-4 py-2 text-sm font-medium rounded-t-lg transition"
               :class="tab === 'workspace' ? 'bg-gray-200 text-gray-900 dark:bg-gray-800 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'">Workspace</button>
+      <button @click="tab = 'cron'" class="px-4 py-2 text-sm font-medium rounded-t-lg transition"
+              :class="tab === 'cron' ? 'bg-gray-200 text-gray-900 dark:bg-gray-800 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'">Cron Jobs</button>
     </div>
 
     <div x-show="tab === 'config'">
